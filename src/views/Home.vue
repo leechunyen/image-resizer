@@ -4,13 +4,13 @@
 
     <!-- Upload -->
     <div class="upload-section">
-      <input id="img-upload" v-show="false" type="file" @change="handleFileChange">
+      <input id="img-upload" v-show="false" type="file" accept="image/*" @change="handleFileChange">
       <uploadViewer onclick="document.getElementById('img-upload').click()" v-model="input.image" />
     </div>
 
     <!-- Select Action -->
     <div class="action-section">
-      <el-checkbox-group v-model="mode" size="large">
+      <el-checkbox-group v-model="mode" @change="imageChanged" size="large">
         <el-checkbox-button @change="resetCrop" key="crop" label="crop">Crop</el-checkbox-button>
         <el-checkbox-button key="compress" label="compress">Compress</el-checkbox-button>
       </el-checkbox-group>
@@ -56,17 +56,17 @@
     <div v-if="mode.includes('compress')" class="compress-section">
       <div class="slider-quality">
         <span class="demonstration">Quality</span>
-        <el-slider :min="1" :max="100" v-model="compress.quality" />
+        <el-slider @change="imageChanged" :min="1" :max="100" v-model="compress.quality" />
       </div>
       <div class="size-settings">
-        <el-checkbox class="compress-area-wh-cb" v-model="compress.limitWnH" label="Set width or height" size="large" />
-        <el-input-number class="compress-area-wh-ip" v-if="compress.limitWnH" v-model="compress.maxWnH" :min="100" />
+        <el-checkbox @change="imageChanged" class="compress-area-wh-cb" v-model="compress.limitWnH" label="Set width or height" size="large" />
+        <el-input-number @change="imageChanged" class="compress-area-wh-ip" v-if="compress.limitWnH" v-model="compress.maxWnH" :min="100" />
       </div>
       <div class="file-size-settings">
-        <el-checkbox class="compress-area-fs-cb" v-model="compress.limitFileSize" label="Set file size" size="large" />
+        <el-checkbox @change="imageChanged" class="compress-area-fs-cb" v-model="compress.limitFileSize" label="Set file size" size="large" />
         <div v-if="compress.limitFileSize">
-          <el-input-number v-model="compress.maxFileSize" :min="1" class="compress-area-fs-ip"/>
-          <el-select v-model="compress.maxFileSizeType" class="compress-area-fs-ty-ip" placeholder="Select" size="large">
+          <el-input-number @change="imageChanged" v-model="compress.maxFileSize" :min="1" class="compress-area-fs-ip"/>
+          <el-select @change="imageChanged" v-model="compress.maxFileSizeType" class="compress-area-fs-ty-ip" placeholder="Select" size="large">
             <el-option key="b" label="B" value="b" />
             <el-option key="kb" label="KB" value="kb" />
             <el-option key="mb" label="MB" value="mb" />
@@ -77,7 +77,7 @@
 
     <!-- Convert -->
     <div class="convert-section">
-      <el-radio-group v-model="convert.outputFormat" size="large">
+      <el-radio-group @change="imageChanged" v-model="convert.outputFormat" size="large">
         <el-radio-button label="jpeg">JPEG</el-radio-button>
         <el-radio-button label="png">PNG</el-radio-button>
         <el-radio-button label="webp">WEBP</el-radio-button>
@@ -85,10 +85,30 @@
     </div>
 
     <!-- Download -->
-    <div class="download-section">
-      <el-button @click="downloadImage">Download</el-button>
+    <div class="output-section">
+      <el-button v-if="!output.imageGenerated" @click="generateImage">Build Image</el-button>
+      <div v-if="output.imageGenerated">
+        <el-button @click="previewImage">Preview</el-button>
+        <el-button @click="downloadImage">Download</el-button>
+      </div>
+
     </div>
   </div>
+
+  <!--Preview-->
+  <el-dialog
+      v-model="output.preview.open"
+      title="Preview"
+      width="70%"
+      top="5vh"
+      @close="previewClose"
+  >
+    <div class="preview-area">
+      <img class="preview-image" alt="preview image" :src="output.preview.url"/>
+    </div>
+
+  </el-dialog>
+
 </template>
 
 <script>
@@ -129,6 +149,14 @@ export default {
       convert: {
         outputFormat: null,
       },
+      output: {
+        imageGenerated: false,
+        blob: null,
+        preview: {
+          open: false,
+          url: null,
+        },
+      }
     }
   },
   methods: {
@@ -136,9 +164,16 @@ export default {
     handleFileChange(event) {
       const file = event.target.files[0]
       if (file) {
-        this.input.image = URL.createObjectURL(file)
-        fileToBlob(file).then((b)=>{this.input.blob = b})
-        this.resetCrop()
+        if (file.type.startsWith("image/")) {
+          this.input.image = URL.createObjectURL(file)
+          fileToBlob(file).then((b)=>{this.input.blob = b})
+          this.imageChanged()
+          this.resetCrop()
+        } else {
+          ElMessageBox.alert('Only image file allowed', {
+            confirmButtonText: 'OK'
+          })
+        }
       }
     },
     // end file upload
@@ -152,19 +187,16 @@ export default {
       this.crop.cropping = false
       this.crop.croppedImage = null
       this.crop.done = false
+      this.imageChanged()
     },
     // end crop
     // compress
     compressImg() {
       if (this.isImageUploaded() && this.isCropped()) {
 
-        if (this.convert.outputFormat === null) {
-          ElMessageBox.alert('Please select a output format', {
-            confirmButtonText: 'OK'
-          })
-        } else {
+        if (this.convert.outputFormat !== null) {
           let blob = null;
-          if (this.isCropped() && this.crop.croppedImage !== null) {
+          if (this.isCropped() && this.crop.done) {
             blob = convertBase64UrlToBlob(this.crop.croppedImage)
           } else {
             blob = this.input.blob
@@ -210,24 +242,52 @@ export default {
       }
     },
     // end compress
+    // generate image
+    async generateImage() {
+      if (this.isImageUploaded() && this.isCropped()) {
+        if (this.convert.outputFormat === null) {
+          await ElMessageBox.alert('Please select a output format', {
+            confirmButtonText: 'OK'
+          })
+        } else {
+          const loading = ElLoading.service({
+            lock: true,
+            text: 'Loading',
+            background: 'rgba(0, 0, 0, 0.7)',
+          })
+
+          await this.compressImg()
+          .then((blob)=>{
+
+            this.output.blob = blob
+            this.output.imageGenerated = true
+
+            loading.close()
+          })
+          .catch((e)=>{
+
+            ElMessageBox.alert(e, {
+              confirmButtonText: 'OK'
+            })
+
+            loading.close()
+          })
+
+        }
+      }
+    },
+    imageChanged() {
+      this.output.blob = null
+      this.output.imageGenerated = false
+    },
+    // end generate image
     // download
     async downloadImage() {
 
-      if (this.isImageUploaded() && this.isCropped()) {
+      if (this.output.imageGenerated) {
 
-        const loading = ElLoading.service({
-          lock: true,
-          text: 'Loading',
-          background: 'rgba(0, 0, 0, 0.7)',
-        })
-
-        // const blob = await this.convertImg()
-        const blob = await this.compressImg()
-
-        loading.close()
-
-        if (blob) {
-          const url = URL.createObjectURL(blob)
+        if (this.output.blob) {
+          const url = URL.createObjectURL(this.output.blob)
 
           const link = document.createElement('a')
           link.href = url;
@@ -239,7 +299,15 @@ export default {
       }
     },
     // end download
-
+    // preview
+    previewImage() {
+      this.output.preview.url = URL.createObjectURL(this.output.blob)
+      this.output.preview.open = true
+    },
+    previewClose() {
+      URL.revokeObjectURL(this.output.preview.url)
+    },
+    // ens preview
 
 
 
@@ -255,7 +323,7 @@ export default {
       return true
     },
     isCropped() {
-      if (this.mode.includes('crop') && !this.crop.croppedImage) {
+      if (this.mode.includes('crop') && !this.crop.done) {
         ElMessageBox.alert('Please crop the image', {
           confirmButtonText: 'OK'
         })
@@ -280,7 +348,7 @@ export default {
 .crop-section,
 .compress-section,
 .convert-section,
-.download-section {
+.output-section {
   margin-bottom: 20px;
 }
 
@@ -347,5 +415,16 @@ export default {
 .compress-area-fs-ty-ip {
   margin-left: 10px;
   width:80px;
+}
+
+.preview-area {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.preview-image {
+  max-width: 100%;
+  height: auto;
 }
 </style>
