@@ -1,6 +1,6 @@
 <template>
   <div class="image-resizer">
-    <h1>Image Resizer</h1>
+    <h1>{{title}}</h1>
 
     <!-- Upload -->
     <div class="upload-section">
@@ -18,17 +18,37 @@
 
     <!-- Crop -->
     <div v-if="mode.includes('crop')" class="crop-section">
+      <div class="crop-title"><el-text>Crop</el-text></div>
       <div class="crop-options" v-if="!crop.cropping">
-        <el-radio-group v-model="crop.mode" size="large">
-          <el-radio-button key="square" label="square">Square</el-radio-button>
-          <el-radio-button key="flexible" label="flexible">Flexible</el-radio-button>
-        </el-radio-group>
-        <el-button @click="startCrop">Start Cropping</el-button>
+        <div class="crop-options-f">
+          <el-radio-group v-model="crop.mode" size="large">
+            <el-radio-button key="square" label="square">Square</el-radio-button>
+            <el-radio-button key="flexible" label="flexible">Flexible</el-radio-button>
+          </el-radio-group>
+        </div>
+        <div class="crop-options-s">
+          <el-button @click="startCrop">Start Cropping</el-button>
+        </div>
       </div>
 
-      <div v-if="crop.cropping">
+      <div v-if="crop.cropping && !crop.done">
+        <div class="cropping-area-f">
+          <el-text>Crop mode: {{crop.mode}}</el-text>
+          <div>
+            <el-button @click="resetCrop">Reset Crop</el-button>
+            <el-button @click="crop.done = true">Done</el-button>
+          </div>
+        </div>
         <imageCropper v-model="crop.croppedImage" :imageParam="input.image" :stencilSize="crop.mode==='square'?{ width: 500, height: 500 }:null" />
-        <el-button @click="resetCrop">Reset Crop</el-button>
+      </div>
+      <div v-if="crop.done" class="crop-done-area">
+        <div class="crop-done-area-f">
+          <el-text>Crop result</el-text>
+          <el-button @click="resetCrop">Reset Crop</el-button>
+        </div>
+       <div class="crop-done-area-s">
+         <img class="cropped-image" alt="cropped image" :src="crop.croppedImage"/>
+       </div>
       </div>
     </div>
 
@@ -39,16 +59,14 @@
         <el-slider :min="1" :max="100" v-model="compress.quality" />
       </div>
       <div class="size-settings">
-        <span class="demonstration">Max width or height</span>
-        <el-checkbox v-model="compress.limitWnH" label="Set width or height" size="large" />
-        <el-input-number v-if="compress.limitWnH" v-model="compress.maxWnH" :min="100" />
+        <el-checkbox class="compress-area-wh-cb" v-model="compress.limitWnH" label="Set width or height" size="large" />
+        <el-input-number class="compress-area-wh-ip" v-if="compress.limitWnH" v-model="compress.maxWnH" :min="100" />
       </div>
       <div class="file-size-settings">
-        <span class="demonstration">Max file size</span>
-        <el-checkbox v-model="compress.limitFileSize" label="Set file size" size="large" />
+        <el-checkbox class="compress-area-fs-cb" v-model="compress.limitFileSize" label="Set file size" size="large" />
         <div v-if="compress.limitFileSize">
-          <el-input-number v-model="compress.maxFileSize" :min="1" />
-          <el-select v-model="compress.maxFileSizeType" class="size-type" placeholder="Select" size="large">
+          <el-input-number v-model="compress.maxFileSize" :min="1" class="compress-area-fs-ip"/>
+          <el-select v-model="compress.maxFileSizeType" class="compress-area-fs-ty-ip" placeholder="Select" size="large">
             <el-option key="b" label="B" value="b" />
             <el-option key="kb" label="KB" value="kb" />
             <el-option key="mb" label="MB" value="mb" />
@@ -87,6 +105,7 @@ export default {
   },
   data() {
     return {
+      title: import.meta.env.VITE_APP_PROJECT_TITLE,
       input:
           {
             image: null,
@@ -97,13 +116,14 @@ export default {
         mode: 'square',
         cropping: false,
         croppedImage: null,
+        done: false,
       },
       compress: {
         quality:100,
         limitWnH: false,
-        maxWnH: 0,
+        maxWnH: 300,
         limitFileSize: false,
-        maxFileSize: 30,
+        maxFileSize: 50,
         maxFileSizeType: 'kb',
       },
       convert: {
@@ -131,6 +151,7 @@ export default {
     resetCrop() {
       this.crop.cropping = false
       this.crop.croppedImage = null
+      this.crop.done = false
     },
     // end crop
     // compress
@@ -205,14 +226,16 @@ export default {
 
         loading.close()
 
-        const url = URL.createObjectURL(blob)
+        if (blob) {
+          const url = URL.createObjectURL(blob)
 
-        const link = document.createElement('a')
-        link.href = url;
-        link.download = 'output.' + this.convert.outputFormat
-        link.click()
+          const link = document.createElement('a')
+          link.href = url;
+          link.download = 'output.' + this.convert.outputFormat
+          link.click()
 
-        URL.revokeObjectURL(url)
+          URL.revokeObjectURL(url)
+        }
       }
     },
     // end download
@@ -261,10 +284,49 @@ export default {
   margin-bottom: 20px;
 }
 
-.crop-options {
+.crop-section, .compress-section {
+  padding: 15px 15px;
+  border: solid 1px #969696;
+  width: 600px;
+}
+
+.crop-title {
+  width: 100%;
   display: flex;
-  align-items: center;
+  justify-content: center;
+}
+
+.crop-options-f, .crop-options-s {
+  display: flex;
+  justify-content: center;
+  padding: 5px 0;
+}
+
+.cropping-area-f {
+  display: flex;
   justify-content: space-between;
+  align-items: center;
+  height: 50px;
+  padding: 0 20px;
+}
+
+.crop-done-area-f {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.crop-done-area-s {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.cropped-image {
+  width: 350px;
+  height: 350px;
+  object-fit: contain;
 }
 
 .slider-quality {
@@ -278,7 +340,12 @@ export default {
   align-items: center;
 }
 
-.size-type {
+.compress-area-wh-cb, .compress-area-fs-cb {
+  width: 160px;
+}
+
+.compress-area-fs-ty-ip {
   margin-left: 10px;
+  width:80px;
 }
 </style>
