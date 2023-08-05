@@ -27,3 +27,8 @@ npm run dev
 ```sh
 npm run build
 ```
+
+# Support to this project
+  Please donate to me\
+  [Donate Link](https://gogetfunding.com/open-source-project-and-library/)\
+  THANK for your support
