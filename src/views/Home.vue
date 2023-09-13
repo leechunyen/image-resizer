@@ -331,6 +331,15 @@ export default {
       }
       return true
     },
+  },
+  mounted() {
+    const isChromium = !!navigator.userAgentData && navigator.userAgentData.brands.some(data => data.brand == 'Chromium');
+
+    if (!isChromium) {
+      ElMessageBox.alert('Please use chromium based browsers to prevent any other issue.', {
+        confirmButtonText: 'OK'
+      })
+    }
   }
 }
 </script>
